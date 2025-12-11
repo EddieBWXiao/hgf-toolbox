@@ -397,6 +397,13 @@ r.optim.iter            = optres.iter;
 
 % Do further optimization runs with random initialization
 if isfield(r.c_opt, 'nRandInit') && r.c_opt.nRandInit > 0
+    % seed the random number generation before looping across initializations
+    if isnan(r.c_opt.seedRandInit)
+        rng('shuffle');
+    else
+        rng(r.c_opt.seedRandInit)
+    end
+    % loop for random initializations
     for i = 1:r.c_opt.nRandInit
         % Use prior mean as starting value for random draw
         init = [r.c_prc.priormus, r.c_obs.priormus];
@@ -406,11 +413,6 @@ if isfield(r.c_opt, 'nRandInit') && r.c_opt.nRandInit > 0
         optsds = priorsds(opt_idx);
 
         % Add random values to prior means, drawn from Gaussian with prior sd
-        if isnan(r.c_opt.seedRandInit)
-            rng('shuffle');
-        else
-            rng(r.c_opt.seedRandInit)
-        end
         init(opt_idx) = init(opt_idx) + randn(1,length(optsds)).*optsds;
 
         % Check whether initialization point is in a region where the objective
@@ -600,7 +602,7 @@ optres.negLl = negLl;
 optres.negLj = negLj;
 optres.LME = LME;
 optres.decompLME = decompLME;
-
+disp(LME)
 % Calculate accuracy and complexity (LME = accu - comp)
 optres.accu = -negLl;
 optres.comp = optres.accu -LME;

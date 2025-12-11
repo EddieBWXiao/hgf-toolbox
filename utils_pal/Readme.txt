@@ -1,0 +1,3 @@
+- This folder contains utility functions for working with TAPAS, developed in the Prediction and Learning Lab, Cambridge.
+- A general assumption of these functions is that the results (e.g., est struct for each participant) are stored in cell arrays.
+- Bowen Xiao (bx226[at]cantab[dot]ac[dot]uk) is happy to be contacted for any questions.
