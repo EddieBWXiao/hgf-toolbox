@@ -1,9 +1,7 @@
 %% Demo of parameter recovery
 
-% choose a perceptual model for this recovery demo
-% options to explore: rw, uhgf, ehgf, and hgf2l
-% 20260324: ehgf can somewhat recover om3 on hein1; uhgf flatlines
 prc_model = 'uhgf'; 
+obs_model = 'ddm_logrt_pwrbp';%'ddm_logrt_minimal';
 
 % number of simulations
 nsims = 30;
@@ -21,23 +19,11 @@ if ~exist('fitModel', 'file')
 end
 
 %%
-
 demodir = fileparts(which('hgf_demo_commands'));
-u = load(fullfile(demodir, 'example_binary_input.txt'));
-%u = load('/Users/xiaobowen/Desktop/tapas_dual_stream_fix/demo/hein1.txt');
+%u = load(fullfile(demodir, 'example_binary_input.txt'));
+u = load('/Users/xiaobowen/Desktop/tapas_dual_stream_fix/demo/hein1.txt');
 
 %% specify the model
-
-% define observation model (a.k.a. the response model)
-obs_config = unitsq_sgm_config();
-
-% lower the ze since default is very high, 
-% which showcases optimal behaviour (low decision noise)
-% but reduces variability for ze
-obs_config.logzemu = -0.3;
-obs_config = align_priors(obs_config);
-obs_params = {'ze'};
-obs_params_loc = {'p_obs.ze'};
 
 % define the perceptual model (a.k.a. the learning model)
 switch prc_model
@@ -64,6 +50,40 @@ switch prc_model
         prc_config = uhgf_binary_config();
         prc_params = {'om2', 'om3'};
         prc_params_loc = {'p_prc.om(2)', 'p_prc.om(3)'};
+end
+
+
+switch obs_model
+    case 'ddm_logrt_minimal'
+        obs_config = ddm_logrt_minimal_config();
+        obs_config.logvscalemu = -0.16; % Hein et al. is even lower, -0.16
+        obs_config.logvscalesa = 0.2; % variance from Hein et al. fit
+        obs_config.logamu = 0.5; % TO-CHECK
+        obs_config.logasa = 0.1; % TO-CHECK
+        obs_config.logndtmu = -1; % mean from Hein et al.
+        obs_config.logndtsa = 0.02; % variance from Hein et al.
+        obs_config.v0mu = 0; % arbitrary (0 means no bias)
+        obs_config.v0sa = 0; % variance from Hein et al.
+        obs_config = align_priors(obs_config);
+        obs_params = {'drift rate scaling', 'boundary sep', 'ndt', 'drift bias'};
+        obs_params_loc = {'p_obs.p(1)', 'p_obs.p(2)','p_obs.p(4)', 'p_obs.p(5)'};
+    case 'ddm_logrt_pwrbp'
+        obs_config = ddm_logrt_pwrbp_config();
+        obs_config.logvscalemu = -0.16; % Hein et al. is even lower, -0.16
+        obs_config.logvscalesa = 0.2; % variance from Hein et al. fit
+        obs_config.logbbmu = 0.5; % mean from Hein et al.
+        obs_config.logbbsa = 0.1; % variance from Hein et al.
+        obs_config.logndtmu = -1; % mean from Hein et al.
+        obs_config.logndtsa = 0.02; % variance from Hein et al.
+        obs_config.logitzmu = 0; %arbitrary (0 means no bias)
+        obs_config.logitzsa = 0.1; % free to show we can recov
+        obs_config.v0mu = 0; % fix at no bias
+        obs_config.v0sa = 0; % fix; in this set up, poor recov if z also free
+        obs_config.logitbpmu = -0.5; % mean from Hein et al.
+        obs_config.logitbpsa = 0.3; % variance from Hein et al.
+        obs_config = align_priors(obs_config);
+        obs_params = {'drift rate scaling', 'bb', 'z','ndt', 'bp'};
+        obs_params_loc = {'p_obs.p(1)', 'p_obs.p(2)','p_obs.p(3)','p_obs.p(4)', 'p_obs.p(6)'};
 end
 
 params_loc = [prc_params_loc, obs_params_loc];

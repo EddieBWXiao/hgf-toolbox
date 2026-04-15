@@ -501,26 +501,45 @@ optres.final = final;
 % Get the negative log-joint and negative log-likelihood
 [negLj, negLl, dummy3, dummy4, trialLogLlsplit] = nlj(final);
 
-% Calculate the covariance matrix Sigma and the log-model evidence (as approximated
-% by the negative variational free energy under the Laplace assumption).
-disp(' ')
-disp('Calculating the log-model evidence (LME)...')
-d     = length(opt_idx);
+% Calculate log model evidence and posterior uncertainty
+try
+    % Calculate the covariance matrix Sigma and the log-model evidence (as approximated
+    % by the negative variational free energy under the Laplace assumption).
+    disp(' ')
+    disp('Calculating the log-model evidence (LME)...')
+    d     = length(opt_idx);
 
-% Numerical computation of the Hessian of the negative log-joint at the MAP estimate
-options.init_h    = 1;
-options.min_steps = 10;
-H = riddershessian(obj_fun, optres.argMin, options);
+    % Numerical computation of the Hessian of the negative log-joint at the MAP estimate
+    options.init_h    = 1;
+    options.min_steps = 10;
+    H = riddershessian(obj_fun, optres.argMin, options);
 
-% Use the Hessian from the optimization, if available,
-% if the numerical Hessian is not positive definite
-if any(isinf(H(:))) || any(isnan(H(:))) || any(eig(H)<=0)
-    if isfield(optres, 'T')
-        % Hessian of the negative log-joint at the MAP estimate
-        % (avoid asymmetry caused by rounding errors)
-        H = inv(optres.T);
-        % Parameter covariance
-        Sigma = optres.T;
+    % Use the Hessian from the optimization, if available,
+    % if the numerical Hessian is not positive definite
+    if any(isinf(H(:))) || any(isnan(H(:))) || any(eig(H)<=0)
+        if isfield(optres, 'T')
+            % Hessian of the negative log-joint at the MAP estimate
+            % (avoid asymmetry caused by rounding errors)
+            H = inv(optres.T);
+            % Parameter covariance
+            Sigma = optres.T;
+            % Ensure H and Sigma are positive semi-definite
+            H = nearest_psd(H);
+            Sigma = nearest_psd(Sigma);
+            % Parameter correlation
+            Corr = tapas_Cov2Corr(Sigma);
+            % Log-model evidence ~ negative variational free energy
+            LME = -optres.valMin + 1/2*log(1/det(H)) + d/2*log(2*pi);
+            % decomposed LME
+            decompLME.logjoint = -optres.valMin;
+            decompLME.postpredcorr = 1/2*log(1/det(H));
+            decompLME.freepars = d/2*log(2*pi);
+        else
+            disp('Warning: Cannot calculate Sigma and LME because the Hessian is not positive definite.')
+        end
+    else
+        % Calculate parameter covariance
+        Sigma = inv(H);
         % Ensure H and Sigma are positive semi-definite
         H = nearest_psd(H);
         Sigma = nearest_psd(Sigma);
@@ -532,38 +551,37 @@ if any(isinf(H(:))) || any(isnan(H(:))) || any(eig(H)<=0)
         decompLME.logjoint = -optres.valMin;
         decompLME.postpredcorr = 1/2*log(1/det(H));
         decompLME.freepars = d/2*log(2*pi);
-    else
-        disp('Warning: Cannot calculate Sigma and LME because the Hessian is not positive definite.')
     end
-else
-    % Calculate parameter covariance
-    Sigma = inv(H);
-    % Ensure H and Sigma are positive semi-definite
-    H = nearest_psd(H);
-    Sigma = nearest_psd(Sigma);
-    % Parameter correlation
-    Corr = tapas_Cov2Corr(Sigma);
-    % Log-model evidence ~ negative variational free energy
-    LME = -optres.valMin + 1/2*log(1/det(H)) + d/2*log(2*pi);
-    % decomposed LME
-    decompLME.logjoint = -optres.valMin;
-    decompLME.postpredcorr = 1/2*log(1/det(H));
-    decompLME.freepars = d/2*log(2*pi);
-end
 
-% Record results
-optres.H = H;
-optres.Sigma = Sigma;
-optres.Corr = Corr;
-optres.trialLogLlsplit = trialLogLlsplit;
-optres.negLl = negLl;
-optres.negLj = negLj;
-optres.LME = LME;
-optres.decompLME = decompLME;
+    % Record results
+    optres.H = H;
+    optres.Sigma = Sigma;
+    optres.Corr = Corr;
+    optres.trialLogLlsplit = trialLogLlsplit;
+    optres.negLl = negLl;
+    optres.negLj = negLj;
+    optres.LME = LME;
+    optres.decompLME = decompLME;
+    fprintf('Current LME: %.2f', LME)
+
+catch
+    disp('Warning: LME calculation failed')
+    % Fallback when hessian calculation fails
+    LME = -Inf; % penalise failures
+    optres.H = nan(d);
+    optres.Sigma = nan(d);
+    optres.Corr = nan(d);
+    optres.trialLogLlsplit = trialLogLlsplit;
+    optres.negLl = negLl;
+    optres.negLj = negLj;
+    optres.LME = LME;
+    optres.decompLME = struct();
+    
+end
 
 % Calculate accuracy and complexity (LME = accu - comp)
 optres.accu = -negLl;
-optres.comp = optres.accu -LME;
+optres.comp = optres.accu - LME;
 
 end % function optimrun
 

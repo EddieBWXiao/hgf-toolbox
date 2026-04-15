@@ -61,8 +61,16 @@ if verbose
 end
 
 % Call fminunc
-[x_opt, fval, ~, output, ~, hessian] = fminunc( ...
-        f, init, fminuncOptions);
+try
+    [x_opt, fval, ~, output, ~, hessian] = fminunc( ...
+            f, init, fminuncOptions);
+catch
+    disp('Warning: fminunc evaluation failed.')
+    hessian = nan(length(init));
+    fval = Inf;
+    x_opt = init;
+    output = struct();
+end
 
 % Compute T_opt from the Hessian
 % Slightly awkward because the one place that uses it inverts it again, with loss of numerical precision
@@ -85,45 +93,53 @@ output.hessian_fminunc = hessian; %store the original hessian as a copy
 if check_hessian && ~hessian_invalid
     
     H = inv(T_opt); % as will be done in tapas_fitModel
-    
-    % Will tapas_nearest_psd(Sigma) fail in tapas_fitModel?
-    % nearest PSD could fail to reach ~any(eig(X)<0), likely due to some numerical precision issue
-    % causes infinite loop during LME calculation
-    n_while_loops = 1000;
-    if ~internal_nearest_psd_available(T_opt, n_while_loops)
-        fprintf('Warning: nearest_psd failed for the inverse Hessian after %i iterations\n', n_while_loops)
-        disp('Infinite loop possible for inverse Hessian')
-        disp('The offending inverse Hessian:')
-        disp(T_opt)
-        T_opt = []; %remove T_opt; let fitModel handle the missing optres.T
-        disp('optres.T not saved; may result in undefined Sigma in tapas_fitModel if the alternative Hessian also fails there')
-    
-    % do the same check on H
-    elseif ~internal_nearest_psd_available(H, n_while_loops)
-        fprintf('Warning: nearest_psd failed for the Hessian after %i iterations\n', n_while_loops)
-        disp('Infinite loop possible for the Hessian')
-        disp('The offending Hessian:')
-        disp(H)
+    if any(isnan(H(:))) || any(isinf(H(:)))
+        
+        disp('Warning: inverting T_opt from optimizer produced NaN or Inf.')
         T_opt = []; %remove T_opt; let fitModel handle the missing optres.T
         disp('optres.T not saved; may result in undefined Sigma in tapas_fitModel if the alternative Hessian also fails there')
     
     else
-        % if safe to run nearest_psd on H, run this additional check...
-        
-        % When the T_opt (optres.T in fitModel) is used to compute the LME...
-        % tapas_fitModel catches Hessians that are not positive semi-definite
-        % and uses tapas_nearest_psd, which checks the eigenvalues
-        % however, it computes LME based on det(H), which can still be negative
-        % [yes, for some reason, ~any(eig(X) < 0), can still have det(H)<0 ???]
-        % the complex LME prodcued may appear larger than LMEs from other initializations, despite a more problematic Hessian
-        % The following code forces the optimization result to be Inf, leading to -Inf LME
-        % Users may use new random initializations to explore the parameter space and potentially identify a better Hessian
-        H = nearest_psd(H); % there is an infinite loop risk here, but not encountered during use as of Dec 2025
-        if det(H) < 0
-            disp('Warning: det(H)<0; Hessian not positive semi-definite. If final LME = -Inf, increase nRandInit.')
-            fval = Inf;
+    
+        % Will tapas_nearest_psd(Sigma) fail in tapas_fitModel?
+        % nearest PSD could fail to reach ~any(eig(X)<0), likely due to some numerical precision issue
+        % causes infinite loop during LME calculation
+        n_while_loops = 1000;
+        if ~internal_nearest_psd_available(T_opt, n_while_loops)
+            fprintf('Warning: nearest_psd failed for the inverse Hessian after %i iterations\n', n_while_loops)
+            disp('Infinite loop possible for inverse Hessian')
+            disp('The offending inverse Hessian:')
+            disp(T_opt)
+            T_opt = []; %remove T_opt; let fitModel handle the missing optres.T
+            disp('optres.T not saved; may result in undefined Sigma in tapas_fitModel if the alternative Hessian also fails there')
+
+        % do the same check on H
+        elseif ~internal_nearest_psd_available(H, n_while_loops)
+            fprintf('Warning: nearest_psd failed for the Hessian after %i iterations\n', n_while_loops)
+            disp('Infinite loop possible for the Hessian')
+            disp('The offending Hessian:')
+            disp(H)
+            T_opt = []; %remove T_opt; let fitModel handle the missing optres.T
+            disp('optres.T not saved; may result in undefined Sigma in tapas_fitModel if the alternative Hessian also fails there')
+
+        else
+            % if safe to run nearest_psd on H, run this additional check...
+
+            % When the T_opt (optres.T in fitModel) is used to compute the LME...
+            % tapas_fitModel catches Hessians that are not positive semi-definite
+            % and uses tapas_nearest_psd, which checks the eigenvalues
+            % however, it computes LME based on det(H), which can still be negative
+            % [yes, for some reason, ~any(eig(X) < 0), can still have det(H)<0 ???]
+            % the complex LME prodcued may appear larger than LMEs from other initializations, despite a more problematic Hessian
+            % The following code forces the optimization result to be Inf, leading to -Inf LME
+            % Users may use new random initializations to explore the parameter space and potentially identify a better Hessian
+            H = nearest_psd(H); % there is an infinite loop risk here, but not encountered during use as of Dec 2025
+            if det(H) < 0
+                disp('Warning: det(H)<0; Hessian not positive semi-definite. If final LME = -Inf, increase nRandInit.')
+                fval = Inf;
+            end
+
         end
-        
     end
 end
 
