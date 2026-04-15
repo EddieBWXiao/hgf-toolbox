@@ -44,6 +44,11 @@ for k = 2:1:n
         da(k) = 0;
         v(k)  = v(k-1);
     end
+    
+    % numerical stability: clamping v(k)
+    v(k) = max(v(k), 0.001);
+    v(k) = min(v(k), 0.999);
+    
 end
 
 % Predicted value
